@@ -1,0 +1,179 @@
+<head>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.3.1/dist/semantic.min.css">
+  <script src="scripts/jquery-3.1.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.3.1/dist/semantic.min.js"></script>
+  <script src="scripts/ejs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qwest/4.5.0/qwest.min.js"></script>
+	<style>
+		.ui.mini.circular.labels .ui.label{
+			margin-right:0em;
+		}
+		.ui.tiny.header{
+			margin-bottom:.2em;
+		}
+		.ui.teal.basic.tiny.label{
+			margin-bottom:.5em
+		}
+	</style>
+	<script>
+    function runSemantics(){
+			$(".rating").rating('disable');
+			$(".progress").progress();
+			$('tr td:first-child').click(function(){
+				var is = [['grey','radio'],['green','checkmark']]
+				var c = this.children[0].children[0].classList
+				var its = c.contains(...is[0])
+				c.remove(...is[+!its])
+				c.add(...is[+its])
+				$(this).closest('tr').toggleClass('positive')
+			})
+      $('#search .ui.dropdown').dropdown()
+    }
+	</script>
+</head>
+
+<body>
+  <script id="course-template" type="text/x-ejs-template">
+    <div class="ui huge header">
+      <%= title %>
+      <div class="sub header"><%= code %></div>     
+    </div>
+    <p><%= des %></p>
+  </script>
+  <script id="section-template" type="text/x-ejs-template">
+  <% Object.values(sections).forEach(section => { %>
+    <tr>
+      <!-- Code -->
+      <td>
+        <div class="ui header">
+          <i class="grey radio icon"></i>
+          <%= section.section %>
+        </div>
+      </td>
+      <!-- Instructor -->
+      <td>
+        <% section.instructors.forEach(instructor => { %>
+        <a href="https://web.byui.edu/Directory/Employee<%= instructor.email ? '/'+instructor.email : 's/'+instructor.last %>" class="ui header" target="_blank">
+          <%= instructor.last %>
+          <div class="sub header">
+            <%= instructor.first %> <%= instructor.middle %>
+            <% if(instructor.email){ %><i class="small linkify icon"></i><% } %>
+          </div>
+        </a>
+        <% if(section.instructors.length > 1){ %><div class="ui divider"></div><% } %>
+        <% }) %>
+      </td>
+      <!-- Rating -->
+      <td>
+        <% section.instructors.forEach(instructor => { %>
+          <% if(instructor.accounts){ %>
+            <div class="ui rating" data-rating="<%= Math.round(instructor.avgRating) %>" data-max-rating="5"></div>
+            <br/>
+            <% instructor.accounts.forEach(account => { %>
+              <a class="header" href="http://www.ratemyprofessors.com/ShowRatings.jsp?tid=<%= account.id %>" target="_blank"><%= account.numRatings %> review<%= account.numRatings != 1?'s':'' %></a>
+            <% }) %>
+          <% } else { %>
+            <a class="header" href="http://www.ratemyprofessors.com/search.jsp?queryoption=HEADER&queryBy=teacherName&schoolName=Brigham+Young+University-Idaho&schoolID=1754&query=<%= instructor.first+'%20'+instructor.last %>" target="_blank">
+              <div class="ui rating" data-rating="0" data-max-rating="5"></div>
+            </a>
+            <% if(section.instructors.length > 1){ %><br/><br/><% } %>
+          <% } %>
+          <% if(section.instructors.length > 1){ %><div class="ui divider"></div><% } %>
+        <% }) %>
+      </td>
+      <!-- Status -->
+      <td class="center aligned">
+        <div class="item">
+          <% var isClosed = section.status != 'Open' && section.status != 'Reopened' %>
+          <% if(isClosed){ %>
+          <div class="ui teal basic tiny label"><% section.status %></div>
+          <% } %>
+          <div class="ui small <%= isClosed?'disabled':'' %> teal progress" data-value="<%= section.seatsFilled %>" data-total="<%= section.seatsTotal %>">
+            <div class="bar"></div>
+            <div class="label"><%= section.seatsFilled %> of <%= section.seatsTotal %> filled</div>
+          </div>
+        </div>
+      </td>
+      <!-- Schedule -->
+      <td>
+        <% section.schedules.forEach(schedule => { %>
+    
+          <% var isOnline = schedule.time == '0:00 - 0:00 AM' %>
+          <div class="ui tiny header">
+            <%= isOnline?schedule.location:schedule.time %>
+            <div class="sub header">
+              <%= !isOnline?schedule.location+' | ':'' %><%= schedule.method %>
+            </div>
+          </div>
+          <% if(!isOnline){ %>
+            <div class="ui mini circular labels">
+              <% ['M','Tu','W','Th','F','S'].forEach((day,i) => { %>
+              <div class="ui <%= schedule.days[i]?'teal':'' %> label"><%= day %></div>
+              <% }) %>
+            </div>
+          <% } %>
+        <% }) %>
+      </td>
+    </tr>
+    <% }) %>
+  </script>
+<div class="ui grid container">
+  <div class="twelve wide column">
+    <div id="course-info">
+    </div>
+    <table class="ui sortable striped selectable single line celled table">
+      <thead>
+        <tr>
+          <th>Section #</th>
+          <th>Instructor</th>
+          <th>Rating</th>
+          <th class="three wide">Status</th>
+          <th>Schedule</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </div>
+  <div class="four wide column">
+    <div class="ui right labeled input" id="search">
+      <input type="text" placeholder="Course Code">
+      <div class="ui dropdown label">
+        <div class="text">2018;SP</div>
+        <i class="dropdown icon"></i>
+        <div class="menu">
+          <div class="item">2017;FA</div>
+          <div class="item">2018;FA</div>
+          <div class="item">2018;SP</div>
+          <div class="item">2018;SS</div>
+          <div class="item">2018;WI</div>
+        </div>
+      </div>
+    </div>
+    <div class="ui small button" style="margin-top:1em;" onclick="search()">Search</div>
+  </div>
+</div>
+  <script>
+    var SectionTemplate = ejs.compile(document.getElementById('section-template').innerHTML,{client:true})
+    var CourseTemplate = ejs.compile(document.getElementById('course-template').innerHTML,{client:true})
+    async function load(semester,courseCode){
+      var sections,course
+      try{
+        [[,sections],[,course]] = await qwest.get(`api/sections/${semester}/${courseCode}`).get(`api/course/${courseCode}`)
+      } catch(e){
+        console.error(`Couldn't get ${semester} ${courseCode}`)
+        return
+      }
+      document.querySelector('tbody').innerHTML = SectionTemplate({sections:sections})
+      document.getElementById('course-info').innerHTML = CourseTemplate(course)
+      runSemantics()
+    }
+    async function search(){
+      var course = document.querySelector('#search input').value
+      var semester = document.querySelector('#search .text').innerHTML
+      course = course.replace(/\s/g,'').toUpperCase()
+      load(semester,course)
+    }
+    load('2018;WI','CS313')
+  </script>
+</body>
