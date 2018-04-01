@@ -14,11 +14,28 @@
 		.ui.teal.basic.tiny.label{
 			margin-bottom:.5em
 		}
+    .image-cropper {
+      float:left;
+      width: 60px;
+      height: 60px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+    img {
+        display: inline;
+        margin: 0 auto;
+        height: auto;
+        width: 100%;
+    }
 	</style>
 	<script>
     function runSemantics(){
 			$(".rating").rating('disable');
-			$(".progress").progress();
+      $(".progress").progress({
+        showActivity:false
+      });
 			$('tr td:first-child').click(function(){
 				var is = [['grey','radio'],['green','checkmark']]
 				var c = this.children[0].children[0].classList
@@ -27,7 +44,6 @@
 				c.add(...is[+its])
 				$(this).closest('tr').toggleClass('positive')
 			})
-      $('#search .ui.dropdown').dropdown()
     }
 	</script>
 </head>
@@ -53,6 +69,9 @@
       <!-- Instructor -->
       <td>
         <% section.instructors.forEach(instructor => { %>
+        <div class="image-cropper">
+          <img src="https://web.byui.edu/Directory/Employee/<%= instructor.email ? instructor.email : 'notfound' %>.jpg">
+        </div>
         <a href="https://web.byui.edu/Directory/Employee<%= instructor.email ? '/'+instructor.email : 's/'+instructor.last %>" class="ui header" target="_blank">
           <%= instructor.last %>
           <div class="sub header">
@@ -85,8 +104,9 @@
       <td class="center aligned">
         <div class="item">
           <% var isClosed = section.status != 'Open' && section.status != 'Reopened' %>
+          <% console.log(section.status,isClosed) %>
           <% if(isClosed){ %>
-          <div class="ui teal basic tiny label"><% section.status %></div>
+          <div class="ui teal basic tiny label"><%= section.status %></div>
           <% } %>
           <div class="ui small <%= isClosed?'disabled':'' %> teal progress" data-value="<%= section.seatsFilled %>" data-total="<%= section.seatsTotal %>">
             <div class="bar"></div>
@@ -136,21 +156,18 @@
     </table>
   </div>
   <div class="four wide column">
-    <div class="ui right labeled input" id="search">
-      <input type="text" placeholder="Course Code">
-      <div class="ui dropdown label">
+    <div class="ui segment">
+      <div id="semester" class="ui large dropdown label">
         <div class="text">2018;SP</div>
         <i class="dropdown icon"></i>
         <div class="menu">
-          <div class="item">2017;FA</div>
-          <div class="item">2018;FA</div>
-          <div class="item">2018;SP</div>
-          <div class="item">2018;SS</div>
-          <div class="item">2018;WI</div>
         </div>
       </div>
+      <div class="ui right input" id="search">
+        <input type="text" placeholder="Course Code">
+      </div>
+      <div class="ui small button" style="margin-top:1em;" onclick="search()">Search</div>
     </div>
-    <div class="ui small button" style="margin-top:1em;" onclick="search()">Search</div>
   </div>
 </div>
   <script>
@@ -170,10 +187,37 @@
     }
     async function search(){
       var course = document.querySelector('#search input').value
-      var semester = document.querySelector('#search .text').innerHTML
+      var semester = document.querySelector('#semester .selected').dataset.value
       course = course.replace(/\s/g,'').toUpperCase()
       load(semester,course)
     }
-    load('2018;WI','CS313')
+    
+    async function loadSemesters(){
+      var currentSemester = new Date().getFullYear()+';'+(() => {
+        switch(new Date().getMonth()){
+          case 10:case 11:case 0:case 1:
+          return 'WI'
+          case 2:case 3:case 4:
+          return 'SP'
+          case 5:case 6:
+          return 'SS'
+          case 7:case 8:case 9:
+          return 'FA'
+        }
+      })()
+      const calc = ([year,sem]) => year*4 + ['WI','SP','SS','FA'].indexOf(sem)
+      const name = ([year,sem]) => ({WI:'Winter',SP:'Spring',SS:'Summer',FA:'Fall'})[sem]+' '+year
+      var res = await qwest.get(`api/sections`)
+      $('.ui.dropdown').dropdown({
+        values:JSON.parse(res.response).map(n => ({
+          name: name(n.code.split(';')),
+          value: n.code,
+          selected: n.code == currentSemester
+        })).sort((a,b) => calc(a.value.split(';')) - calc(b.value.split(';')))
+      })
+    }
+    load('2018;WI','FDREL275')
+    loadSemesters()
+
   </script>
 </body>
