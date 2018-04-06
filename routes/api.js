@@ -69,7 +69,6 @@ router.get('/sections/:semester/:course/:section', function(req, res, next) {
 
 /* GET Course info */
 router.get('/course/:course', function(req, res, next) {
-  console.log('hi')
   db.ref(`/courses/${req.params.course}`).once('value',snapshot => {
     var data = snapshot.val()
     if(!data){
@@ -78,6 +77,19 @@ router.get('/course/:course', function(req, res, next) {
       // data = Object.keys(data).map(n => ({code:n}))
       res.setHeader('Content-Type', 'application/json');
       res.send(data);
+    }
+  })
+});
+
+/* GET list of courses */
+router.get('/courses/:semester', function(req, res, next) {
+  db.ref(`/directories/courses/${req.params.semester}`).once('value',snapshot => {
+    var data = snapshot.val()
+    if(!data){
+      res.status(404).send()
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.send(Object.values(data));
     }
   })
 });

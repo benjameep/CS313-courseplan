@@ -5,45 +5,59 @@
   <script src="scripts/ejs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qwest/4.5.0/qwest.min.js"></script>
 	<style>
-		.ui.mini.circular.labels .ui.label{
-			margin-right:0em;
-		}
-		.ui.tiny.header{
-			margin-bottom:.2em;
-		}
-		.ui.teal.basic.tiny.label{
-			margin-bottom:.5em
-		}
-    .image-cropper {
-      float:left;
-      width: 60px;
-      height: 60px;
-      position: relative;
-      overflow: hidden;
-      border-radius: 50%;
-      margin-right: 10px;
-    }
-    img {
-        display: inline;
-        margin: 0 auto;
-        height: auto;
-        width: 100%;
-    }
+      .avatar.image-cropper{
+        width: 2.5em;
+        height: 2.5em;
+      }
+      .image-cropper {
+        float:left;
+        width: 60px;
+        height: 60px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 50%;
+        margin-right: 10px;
+      }
+      img {
+          display: inline;
+          margin: 0 auto;
+          height: auto;
+          width: 100%;
+      }
+      .ui.mini.circular.labels{
+        display:inline;
+      }
+      .ui.mini.circular.labels .ui.label{
+        margin-right:0em;
+      }
+      .ui.tiny.header{
+        margin-bottom:.2em;
+      }
+      .ui.teal.basic.tiny.label{
+        margin-bottom:.5em
+      }
+      #semester{
+        margin-bottom: 10px;
+      }
 	</style>
 	<script>
+    function flipIt(element){
+      var is = [['grey','radio'],['green','checkmark']]
+      var c = element.children[0].children[0].classList
+      var its = c.contains(...is[0])
+      c.remove(...is[+!its])
+      c.add(...is[+its])
+      $(element).closest('tr').toggleClass('positive')
+    }
     function runSemantics(){
 			$(".rating").rating('disable');
       $(".progress").progress({
         showActivity:false
       });
 			$('tr td:first-child').click(function(){
-				var is = [['grey','radio'],['green','checkmark']]
-				var c = this.children[0].children[0].classList
-				var its = c.contains(...is[0])
-				c.remove(...is[+!its])
-				c.add(...is[+its])
-				$(this).closest('tr').toggleClass('positive')
-			})
+        flipIt(this)
+        onSelection(this)
+      })
     }
 	</script>
 </head>
@@ -104,7 +118,6 @@
       <td class="center aligned">
         <div class="item">
           <% var isClosed = section.status != 'Open' && section.status != 'Reopened' %>
-          <% console.log(section.status,isClosed) %>
           <% if(isClosed){ %>
           <div class="ui teal basic tiny label"><%= section.status %></div>
           <% } %>
@@ -137,6 +150,33 @@
     </tr>
     <% }) %>
   </script>
+  <script id="saved-template" type="text/x-ejs-template">
+    <div class="ui selection list">
+    <% if(_saved[_semester]){ %> 
+      <% Object.values(_saved[_semester]).forEach(course => { %>
+        <div class="item" onclick="load('<%= _semester %>','<%= course.course.code %>')">
+          <div class="content">
+            <div class="header"><%= course.course.code %></div>
+            <div class="description"><%= course.course.title %></div>
+            <div class="list">
+              <% Object.values(course.sections).forEach(section => { %>
+                <div class="item">
+                  <div class="avatar image-cropper">
+                    <img src="https://web.byui.edu/Directory/Employee/<%= section.instructors[0].email || 'notfound' %>.jpg">
+                  </div>
+                  <div class="content">
+                    <div class="header"><%= section.instructors[0].last %>, <%= section.instructors[0].first %><%= section.instructors[0].middle?' '+section.instructors[0].middle:'' %></div>
+                    <div class="description"><span><%= section.schedules[0].time %> | <strong><%= section.schedules.reduce((days,sche) => sche.days.map((d,i) => d || days[i]),[]).join('') %></strong></div>
+                  </div>
+                </div>
+              <% }) %>              
+            </div>
+          </div>
+        </div>
+      <% }) %>    
+      <% } %>          
+    </div>
+  </script>
 <div class="ui grid container">
   <div class="twelve wide column">
     <div id="course-info">
@@ -163,16 +203,23 @@
         <div class="menu">
         </div>
       </div>
-      <div class="ui right input" id="search">
-        <input type="text" placeholder="Course Code">
+      <div class="ui search">
+        <div class="ui icon input">
+          <input class="prompt" type="text" placeholder="Search for Course...">
+          <i class="search icon"></i>
+        </div>
+        <div class="results"></div>
       </div>
-      <div class="ui small button" style="margin-top:1em;" onclick="search()">Search</div>
+      <div id="saved"></div>
     </div>
   </div>
 </div>
   <script>
     var SectionTemplate = ejs.compile(document.getElementById('section-template').innerHTML,{client:true})
     var CourseTemplate = ejs.compile(document.getElementById('course-template').innerHTML,{client:true})
+    var SavedTemplate = ejs.compile(document.getElementById('saved-template').innerHTML,{client:true})
+    window._saved = localStorage.saved ? JSON.parse(localStorage.saved) : {}
+
     async function load(semester,courseCode){
       var sections,course
       try{
@@ -181,19 +228,53 @@
         console.error(`Couldn't get ${semester} ${courseCode}`)
         return
       }
+      // Allow access for later
+      window._sections = sections
+      window._course = course
+
       document.querySelector('tbody').innerHTML = SectionTemplate({sections:sections})
       document.getElementById('course-info').innerHTML = CourseTemplate(course)
+      document.querySelector('.ui.search input').value = ""
       runSemantics()
+      updateSaved()
     }
+
     async function search(){
       var course = document.querySelector('#search input').value
       var semester = document.querySelector('#semester .selected').dataset.value
       course = course.replace(/\s/g,'').toUpperCase()
       load(semester,course)
     }
-    
+
+    function initSearch(){
+      if(_semester){
+        qwest.get(`api/courses/${_semester}`).then((res,body) => {
+          $('.ui.search').search('destroy')
+          $('.ui.search').search({
+            source: body.map(c => ({title:c.code,description:c.title})),
+            searchFields:[
+              'title','description'
+            ],
+            onSelect: result => {
+              load(_semester,result.title)
+            },
+            
+          })
+        })
+      } else {
+        console.error('tried to get the courses without specifiying semester')
+      }
+    }
+
+    async function semesterChange(semester){
+      window._semester = semester
+      updateSaved()
+      document.querySelector('tbody').innerHTML = ""
+      document.getElementById('course-info').innerHTML = ""
+      initSearch()
+    }
     async function loadSemesters(){
-      var currentSemester = new Date().getFullYear()+';'+(() => {
+      window._semester = new Date().getFullYear()+';'+(() => {
         switch(new Date().getMonth()){
           case 10:case 11:case 0:case 1:
           return 'WI'
@@ -212,12 +293,50 @@
         values:JSON.parse(res.response).map(n => ({
           name: name(n.code.split(';')),
           value: n.code,
-          selected: n.code == currentSemester
-        })).sort((a,b) => calc(a.value.split(';')) - calc(b.value.split(';')))
+          selected: n.code == _semester
+        })).sort((a,b) => calc(a.value.split(';')) - calc(b.value.split(';'))),
+        onChange: semesterChange,
       })
     }
-    load('2018;WI','FDREL275')
-    loadSemesters()
+    function onSelection(element){
+      var section = element.innerText.trim()
+      var isAdd = element.parentElement.classList.contains('positive')
+      var alreadyExists = _saved[_semester] && _saved[_semester][_course.code] && _saved[_semester][_course.code].sections[section]
 
+      if(isAdd && !alreadyExists){
+        // Set up if not already setup
+        _saved[_semester] || (_saved[_semester] = {}) 
+        _saved[_semester][_course.code] || (_saved[_semester][_course.code] = {course: _course,sections:{}})
+        
+        _saved[_semester][_course.code].sections[section] = _sections[section]
+      } else if(alreadyExists){
+        delete _saved[_semester][_course.code].sections[section]
+        if(!Object.keys(_saved[_semester][_course.code].sections).length){
+          delete _saved[_semester][_course.code]
+          if(!Object.keys(_saved[_semester]).length){
+            delete _saved[_semester]
+          }
+        }
+      }
+      save()
+      updateSaved()
+    }
+    function save(){
+      localStorage.saved = JSON.stringify(_saved)
+    }
+    function updateSaved(){
+      document.querySelectorAll('td:first-child').forEach(element => {
+        var isOn = element.parentElement.classList.contains('positive')
+        var section = element.innerText.trim()
+        var supposedToBeOn = _saved[_semester] && _saved[_semester][_course.code] && _saved[_semester][_course.code].sections[section]
+        if((isOn && !supposedToBeOn) || (!isOn && supposedToBeOn)){
+          flipIt(element)
+        }
+      })
+      document.getElementById('saved').innerHTML = SavedTemplate()
+    }
+
+    loadSemesters()
+    updateSaved()
   </script>
 </body>
