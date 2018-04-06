@@ -203,12 +203,14 @@
         <div class="menu">
         </div>
       </div>
-      <div class="ui search">
-        <div class="ui icon input">
-          <input class="prompt" type="text" placeholder="Search for Course...">
-          <i class="search icon"></i>
+      <div id="search-container">
+        <div class="ui search">
+          <div class="ui icon input">
+            <input class="prompt" type="text" placeholder="Search for Course...">
+            <i class="search icon"></i>
+          </div>
+          <div class="results"></div>
         </div>
-        <div class="results"></div>
       </div>
       <div id="saved"></div>
     </div>
@@ -222,18 +224,21 @@
 
     async function load(semester,courseCode){
       var sections,course
-      try{
-        [[,sections],[,course]] = await qwest.get(`api/sections/${semester}/${courseCode}`).get(`api/course/${courseCode}`)
-      } catch(e){
-        console.error(`Couldn't get ${semester} ${courseCode}`)
-        return
-      }
-      // Allow access for later
-      window._sections = sections
-      window._course = course
-
-      document.querySelector('tbody').innerHTML = SectionTemplate({sections:sections})
-      document.getElementById('course-info').innerHTML = CourseTemplate(course)
+      var promSemesters = qwest.get(`api/sections/${semester}/${courseCode}`).then((res,sections) => {
+        if(res.status >= 200 && res.status < 300){
+          document.querySelector('tbody').innerHTML = SectionTemplate({sections:sections})
+          // Allow access for later
+          window._sections = sections
+        }
+      }).catch(console.error)
+      var promCourse = qwest.get(`api/course/${courseCode}`).then((res,course) => {
+        if(res.status >= 200 && res.status < 300){
+          document.getElementById('course-info').innerHTML = CourseTemplate(course)
+          // Allow access for later
+          window._course = course
+        }
+      }).catch(console.error)
+      await Promise.all([promSemesters,promCourse])
       document.querySelector('.ui.search input').value = ""
       runSemantics()
       updateSaved()
@@ -249,7 +254,11 @@
     function initSearch(){
       if(_semester){
         qwest.get(`api/courses/${_semester}`).then((res,body) => {
-          $('.ui.search').search('destroy')
+          var parent = document.getElementById('search-container')
+          var guts = parent.innerHTML
+          parent.innerHTML = ""
+          parent.innerHTML = guts
+          // $('.ui.search').search('destroy')
           $('.ui.search').search({
             source: body.map(c => ({title:c.code,description:c.title})),
             searchFields:[
@@ -258,11 +267,8 @@
             onSelect: result => {
               load(_semester,result.title)
             },
-            
           })
         })
-      } else {
-        console.error('tried to get the courses without specifiying semester')
       }
     }
 
